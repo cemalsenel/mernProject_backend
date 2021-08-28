@@ -1,111 +1,103 @@
-const Category = require("../models/Category");
-const { validationResult } = require("express-validator");
+const Category = require('../models/Category');
+const { validationResult } = require('express-validator');
+const checkFunction = require('../helpers/checkFunction');
+const sendData = require('../helpers/sendData');
 
 exports.addCategory = async (req, res) => {
-  try {
-    const { categoryName, description } = req.body;
+    try {
+        const { categoryName } = req.body;
 
-    //field validation
-    const validationErr = validationResult(req);
-    if (validationErr?.errors?.length > 0) {
-      return res.status(400).json({ errors: validationErr.array() });
+        //Field Validation
+        const validationErr = validationResult(req);
+        checkFunction(res, validationErr?.errors?.length > 0, validationErr.array());
+
+        // category exist check
+        const existCategory = await Category.findOne({ categoryName: categoryName });
+        checkFunction(res, existCategory, "Category is already exists");
+
+        //save category
+        let category = new Category(req.body);
+        category = await category.save({ new: true });
+        sendData(res, category);
+    }
+    catch (err) {
+        checkFunction(res, err, err.message)
     }
 
-    //category exist check
-    const existCategory = await Category.findOne({
-      categoryName: categoryName,
-    });
-    if (existCategory) {
-      return res
-        .status(400)
-        .json({ errors: [{ message: "Category already exists" }] });
-    }
-
-    //save category ===>  const category = new Category(req.body);  => body' de yalnıza categoryName ve description var ise bu da kullanılabilir
-    const category = new Category({
-      categoryName: categoryName,
-      description: description,
-    });
-
-    const addedCategory = await category.save({ new: true });
-    //res.status(200).send("Category added");
-    res.status(200).json(addedCategory);
-  } catch (error) {
-    res.status(500).json({ errors: [{ message: error.message }] });
-  }
-};
+}
 
 exports.getCategory = async (req, res) => {
-  try {
-    const category = await Category.findById({ _id: req.params.id });
-    res.status(200).json(category);
-  } catch (error) {
-    res.status(500).json({ errors: [{ message: error.message }] });
-  }
-};
-
-exports.updatedCategory = async (req, res) => {
     try {
-        const validationErr = validationResult(req);
-        if(validationErr?.errors?.length){
-            return res.status(400).json({errors: validationErr.array()});
-        }
-
-        //update
-        const updatedCategory = await Category.findOneAndUpdate(
-            {_id:req.body.id},
-            {
-                // categoryName: req.body.categoryName,
-                // description: req.body.description,
-                ...req.body,
-                status: 'updated',
-                updatedDate: Date.now(),
-            },
-            {
-                new: true, // güncellenen veriyi geri döner
-                runValidators: true,
-            }
-        );
-        // res.status(200).send("Category updated");
-        res.status(200).json(updatedCategory)
-    } catch (error) {
-        return res.status(500).json({errors: [{message: error.message}]})
+        const category = await Category.findById({ _id: req.params.id })
+        sendData(res, category);
     }
-};
+    catch (err) {
+        checkFunction(res, err, err.message, 500)
+    }
+}
+
+exports.updateCategory = async (req, res) => {
+    try {
+        //field validation
+        const validationErr = validationResult(req);
+        checkFunction(res, validationErr?.errors?.length > 0, validationErr.array());
+
+        // update
+        const { id, categoryName, description, products } = req.body;
+        let updatedCategory = await Category.findOneAndUpdate(
+            { _id: id },
+            {
+                categoryName,
+                description,
+                status: 'updated',
+                $push: {
+                    products: products
+                }
+            },
+            { new: true, }
+        );
+        sendData(res, updatedCategory);
+    }
+    catch (err) {
+        checkFunction(res, err, err.message, 500)
+    }
+
+}
 
 exports.deleteCategory = async (req, res) => {
     try {
-         const deletedCategory = await Category.findOneAndUpdate(
-            {_id:req.params.id},
+        let deletedCategory = await Category.findOneAndUpdate(
+            { _id: req.params.id },
             {
-                status:'deleted',
-                deletedDate: Date.now(),
+                status: 'deleted',
+                deletedAt: Date.now(),
             },
-            {
-                new: true
-            }
+            { new: true }
         );
-        // res.status(200).send("Category deleted");
-        res.status(200).json(deletedCategory);
-    } catch (error) {
-        return res.status(500).json({errors: [{message: error.message}]});
+        sendData(res, deletedCategory);
     }
-};
+    catch (err) {
+        checkFunction(res, err, err.message, 500)
+    }
+
+}
 
 exports.getCategories = async (req, res) => {
     try {
-        const categories = await Category.find({}).where('status', /[^deleted]/).select('-status'); // /[^deleted]/ ==> status'u  deleted olmayanları seçer
-        res.status(200).json(categories);
-    } catch (error) {
-        return res.status(500).json({errors: [{message: error.message}]});
+        const categories = await Category.find({}).where('status', /[^deleted]/i).select('-password');
+        sendData(res, categories);
     }
-};
+    catch (err) {
+        checkFunction(res, err, err.message, 500)
+    }
+}
 
 exports.destroyCategory = async (req, res) => {
     try {
-        await Category.deleteOne({_id: req.params.id});
-        res.status(200).send("Data is deleted")
-    } catch (error) {
-        return res.status(500).json({errors: [{message: error.message}]});
+        await Category.deleteOne({ _id: req.params.id });
+        sendData(res, 'Data is deleted');
+    }
+    catch (err) {
+        checkFunction(res, err, err.message, 500)
     }
 }
